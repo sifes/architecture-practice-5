@@ -2,32 +2,42 @@ networks:
   servers:
 
 services:
-
   balancer:
     build: .
-    command: "lb"
+    command: 'lb'
     networks:
       - servers
     ports:
-      - "8090:8090"
+      - '8090:8090'
 
   server1:
     build: .
     networks:
       - servers
     ports:
-      - "8080:8080"
+      - '8080:8080'
+    volumes:
+      - server1-data:/opt/practice-4/data
 
   server2:
     build: .
     networks:
       - servers
     ports:
-      - "8081:8080"
+      - '8081:8080'
+    volumes:
+      - server2-data:/opt/practice-4/data
 
   server3:
     build: .
     networks:
       - servers
     ports:
-      - "8082:8080"
+      - '8082:8080'
+    volumes:
+      - server3-data:/opt/practice-4/data
+
+volumes:
+  server1-data:
+  server2-data:
+  server3-data:
