@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sifes/architecture-practice-4-template/httptools"
-	"github.com/sifes/architecture-practice-4-template/signal"
+	"github.com/sifes/architecture-practice-5/httptools"
+	"github.com/sifes/architecture-practice-5/signal"
 )
 
 var (
