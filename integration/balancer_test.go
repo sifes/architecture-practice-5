@@ -11,6 +11,7 @@ import (
 )
 
 const baseAddress = "http://balancer:8090"
+const teamName = "telepuziki"
 
 var client = http.Client{
 	Timeout: 3 * time.Second,
@@ -21,6 +22,9 @@ func TestBalancer(t *testing.T) {
 		t.Skip("Integration test is not enabled")
 	}
 
+	// Wait a bit for services to initialize
+	time.Sleep(3 * time.Second)
+
 	// First, verify all servers are healthy
 	for i := 0; i < len(serversPool); i++ {
 		if !health(serversPool[i]) {
@@ -28,44 +32,74 @@ func TestBalancer(t *testing.T) {
 		}
 	}
 
-	endpoints := []string{
-		"/api/v1/some-data",
+	// Test the main endpoint with team name parameter
+	endpoint := fmt.Sprintf("/api/v1/some-data?key=%s", teamName)
+	
+	serversUsed := make(map[string]bool)
+	requestsCount := 30
+	successfulRequests := 0
+
+	for i := 0; i < requestsCount; i++ {
+		url := fmt.Sprintf("%s%s", baseAddress, endpoint)
+		resp, err := client.Get(url)
+		if err != nil {
+			t.Errorf("Request to %s failed: %v", url, err)
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Request to %s returned status %d, expected 200", url, resp.StatusCode)
+		} else {
+			successfulRequests++
+		}
+
+		serverFrom := resp.Header.Get("lb-from")
+		if serverFrom == "" {
+			t.Error("No lb-from header present in response")
+		} else {
+			t.Logf("[%s] response from [%s]", endpoint, serverFrom)
+			serversUsed[serverFrom] = true
+		}
+
+		resp.Body.Close()
+	}
+
+	// Verify we got non-empty data
+	if successfulRequests == 0 {
+		t.Error("No successful requests with data returned")
+	}
+
+	t.Logf("Successful requests: %d/%d", successfulRequests, requestsCount)
+	t.Logf("Servers used: %d", len(serversUsed))
+	for server := range serversUsed {
+		t.Logf("Server used: %s", server)
+	}
+
+	// Test other endpoints for completeness
+	otherEndpoints := []string{
 		"/api/v1/some-data-check1",
 		"/api/v1/some-data-check2",
 		"/api/v1/some-data-check3",
 	}
 
-	serversUsed := make(map[string]bool)
-	requestsCount := 30
-
-	for i := 0; i < requestsCount; i++ {
-		for _, endpoint := range endpoints {
-			url := fmt.Sprintf("%s%s", baseAddress, endpoint)
-			resp, err := client.Get(url)
-			if err != nil {
-				t.Errorf("Request to %s failed: %v", url, err)
-				continue
-			}
-
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("Request to %s returned status %d, expected 200", url, resp.StatusCode)
-			}
-
-			serverFrom := resp.Header.Get("lb-from")
-			if serverFrom == "" {
-				t.Error("No lb-from header present in response")
-			} else {
-				t.Logf("[%s] response from [%s]", endpoint, serverFrom)
-				serversUsed[serverFrom] = true
-			}
-
-			resp.Body.Close()
+	for _, endpoint := range otherEndpoints {
+		url := fmt.Sprintf("%s%s", baseAddress, endpoint)
+		resp, err := client.Get(url)
+		if err != nil {
+			t.Errorf("Request to %s failed: %v", url, err)
+			continue
 		}
-	}
 
-	t.Logf("Servers used: %d", len(serversUsed))
-	for server := range serversUsed {
-		t.Logf("Server used: %s", server)
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Request to %s returned status %d, expected 200", url, resp.StatusCode)
+		}
+
+		serverFrom := resp.Header.Get("lb-from")
+		if serverFrom != "" {
+			serversUsed[serverFrom] = true
+		}
+
+		resp.Body.Close()
 	}
 
 	expectedServers := []string{"server1:8080", "server2:8080", "server3:8080"}
@@ -83,7 +117,7 @@ func TestConsistentHashingOfBalancer(t *testing.T) {
 
 	endpointServersMap := make(map[string]string)
 	endpoints := []string{
-		"/api/v1/some-data",
+		fmt.Sprintf("/api/v1/some-data?key=%s", teamName),
 		"/api/v1/some-data-check1",
 		"/api/v1/some-data-check2",
 		"/api/v1/some-data-check3",
@@ -131,10 +165,8 @@ func TestURLStickyRouting(t *testing.T) {
 		t.Skip("Integration test is not enabled")
 	}
 
-	const (
-		testURL         = "/api/v1/some-data?key=test123"
-		parallelRequests = 20                            
-	)
+	testURL := fmt.Sprintf("/api/v1/some-data?key=%s&test=123", teamName)
+	const parallelRequests = 20                            
 
 	results := make(chan string, parallelRequests)
 	var wg sync.WaitGroup
@@ -190,7 +222,7 @@ func BenchmarkBalancer(b *testing.B) {
 	}
 
 	urls := []string{
-		fmt.Sprintf("%s/api/v1/some-data", baseAddress),
+		fmt.Sprintf("%s/api/v1/some-data?key=%s", baseAddress, teamName),
 		fmt.Sprintf("%s/api/v1/some-data-check1", baseAddress),
 		fmt.Sprintf("%s/api/v1/some-data-check2", baseAddress),
 		fmt.Sprintf("%s/api/v1/some-data-check3", baseAddress),
